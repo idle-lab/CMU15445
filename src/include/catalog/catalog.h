@@ -25,10 +25,7 @@
 #include "storage/index/b_plus_tree_index.h"
 #include "storage/index/extendible_hash_table_index.h"
 #include "storage/index/index.h"
-#include "storage/index/stl_ordered.h"
-#include "storage/index/stl_unordered.h"
 #include "storage/table/table_heap.h"
-#include "storage/table/tuple.h"
 
 namespace bustub {
 
@@ -39,7 +36,7 @@ using table_oid_t = uint32_t;
 using column_oid_t = uint32_t;
 using index_oid_t = uint32_t;
 
-enum class IndexType { BPlusTreeIndex, HashTableIndex, STLOrderedIndex, STLUnorderedIndex };
+enum class IndexType { BPlusTreeIndex, HashTableIndex };
 
 /**
  * The TableInfo class maintains metadata about a table.
@@ -78,15 +75,14 @@ struct IndexInfo {
    * @param key_size The size of the index key, in bytes
    */
   IndexInfo(Schema key_schema, std::string name, std::unique_ptr<Index> &&index, index_oid_t index_oid,
-            std::string table_name, size_t key_size, bool is_primary_key, IndexType index_type)
+            std::string table_name, size_t key_size, bool is_primary_key)
       : key_schema_{std::move(key_schema)},
         name_{std::move(name)},
         index_{std::move(index)},
         index_oid_{index_oid},
         table_name_{std::move(table_name)},
         key_size_{key_size},
-        is_primary_key_{is_primary_key},
-        index_type_(index_type) {}
+        is_primary_key_{is_primary_key} {}
   /** The schema for the index key */
   Schema key_schema_;
   /** The name of the index */
@@ -102,7 +98,7 @@ struct IndexInfo {
   /** Is primary key index? */
   bool is_primary_key_;
   /** The index type */
-  IndexType index_type_;
+  [[maybe_unused]] IndexType index_type_{IndexType::BPlusTreeIndex};
 };
 
 /**
@@ -245,15 +241,9 @@ class Catalog {
     if (index_type == IndexType::HashTableIndex) {
       index = std::make_unique<ExtendibleHashTableIndex<KeyType, ValueType, KeyComparator>>(std::move(meta), bpm_,
                                                                                             hash_function);
-    } else if (index_type == IndexType::BPlusTreeIndex) {
-      index = std::make_unique<BPlusTreeIndex<KeyType, ValueType, KeyComparator>>(std::move(meta), bpm_);
-    } else if (index_type == IndexType::STLOrderedIndex) {
-      index = std::make_unique<STLOrderedIndex<KeyType, ValueType, KeyComparator>>(std::move(meta), bpm_);
-    } else if (index_type == IndexType::STLUnorderedIndex) {
-      index =
-          std::make_unique<STLUnorderedIndex<KeyType, ValueType, KeyComparator>>(std::move(meta), bpm_, hash_function);
     } else {
-      UNIMPLEMENTED("Unsupported Index Type");
+      BUSTUB_ASSERT(index_type == IndexType::BPlusTreeIndex, "Unsupported Index Type");
+      index = std::make_unique<BPlusTreeIndex<KeyType, ValueType, KeyComparator>>(std::move(meta), bpm_);
     }
 
     // Populate the index with all tuples in table heap
@@ -269,7 +259,7 @@ class Catalog {
 
     // Construct index information; IndexInfo takes ownership of the Index itself
     auto index_info = std::make_unique<IndexInfo>(key_schema, index_name, std::move(index), index_oid, table_name,
-                                                  keysize, is_primary_key, index_type);
+                                                  keysize, is_primary_key);
     auto *tmp = index_info.get();
 
     // Update internal tracking
@@ -403,29 +393,3 @@ class Catalog {
 };
 
 }  // namespace bustub
-
-template <>
-struct fmt::formatter<bustub::IndexType> : formatter<string_view> {
-  template <typename FormatContext>
-  auto format(bustub::IndexType c, FormatContext &ctx) const {
-    string_view name;
-    switch (c) {
-      case bustub::IndexType::BPlusTreeIndex:
-        name = "BPlusTree";
-        break;
-      case bustub::IndexType::HashTableIndex:
-        name = "Hash";
-        break;
-      case bustub::IndexType::STLOrderedIndex:
-        name = "STLOrdered";
-        break;
-      case bustub::IndexType::STLUnorderedIndex:
-        name = "STLUnordered";
-        break;
-      default:
-        name = "Unknown";
-        break;
-    }
-    return formatter<string_view>::format(name, ctx);
-  }
-};
