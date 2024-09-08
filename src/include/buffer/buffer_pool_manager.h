@@ -181,17 +181,42 @@ class BufferPoolManager {
   /** Array of buffer pool pages. */
   Page *pages_;
   /** Pointer to the disk sheduler. */
-  std::unique_ptr<DiskScheduler> disk_scheduler_ __attribute__((__unused__));
+  std::unique_ptr<DiskScheduler> disk_scheduler_;
   /** Pointer to the log manager. Please ignore this for P1. */
   LogManager *log_manager_ __attribute__((__unused__));
   /** Page table for keeping track of buffer pool pages. */
   std::unordered_map<page_id_t, frame_id_t> page_table_;
-  /** Replacer to find unpinned pages for replacement. */
+  /** Replacer to find unpinned pages for replac ement. */
   std::unique_ptr<LRUKReplacer> replacer_;
   /** List of free frames that don't have any pages on them. */
   std::list<frame_id_t> free_list_;
   /** This latch protects shared data structures. We recommend updating this comment to describe what it protects. */
   std::mutex latch_;
+
+  /**
+   * @brief FlushPage 辅助函数，实现刷新数据到磁盘上的具体功能
+   * @param page_id 要刷新的页面 id
+   */
+  auto Flush(page_id_t page_id) -> bool;
+
+  /**
+   * @brief 清空 frame 元数据和页数据
+   * @param frame_id 要清空的帧 id
+   */
+  void ResetPage(frame_id_t frame_id);
+
+  /**
+   * @brief 标记有 worker 正在使用该页面
+   * @param 使用的页面 id
+   */
+  void PinPage(page_id_t page_id);
+
+  /**
+   * @brief 从磁盘中调入页面
+   * @param page_id 要调入内存的页面 id
+   * @return 返回调入内存后页面的地址，如果没有可以 frame 返回 nullptr
+   */
+  auto GetPageFromDisk(page_id_t page_id) -> Page *;
 
   /**
    * @brief Allocate a page on disk. Caller should acquire the latch before calling this function.

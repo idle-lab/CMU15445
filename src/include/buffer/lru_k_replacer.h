@@ -25,19 +25,14 @@ namespace bustub {
 
 enum class AccessType { Unknown = 0, Lookup, Scan, Index };
 
-class LRUKNode {
-
-  LRUKNode(frame_id_t id) : fid_(id) {
-    
-  }
- private:
+struct LRUKNode {
   /** History of last seen K timestamps of this page. Least recent timestamp stored in front. */
   // Remove maybe_unused if you start using them. Feel free to change the member variables as you want.
 
   std::list<size_t> history_;
-  [[maybe_unused]] size_t k_;
-  [[maybe_unused]] frame_id_t fid_; 
-  [[maybe_unused]] bool is_evictable_{false};
+  size_t k_{0};
+  bool is_evictable_{false};
+  frame_id_t fid_;
 };
 
 /**
@@ -152,14 +147,16 @@ class LRUKReplacer {
   auto Size() -> size_t;
 
  private:
+  void RmFrame(frame_id_t frame_id);
   // TODO(student): implement me! You can replace these member variables as you like.
   // Remove maybe_unused if you start using them.
-  std::unordered_map<frame_id_t, LRUKNode> node_store_;
-  [[maybe_unused]] size_t current_timestamp_{0};
-  [[maybe_unused]] size_t curr_size_{0};
-  [[maybe_unused]] size_t replacer_size_;
-  [[maybe_unused]] size_t k_;
-  [[maybe_unused]] std::mutex latch_;
+  std::unordered_map<frame_id_t, std::list<LRUKNode>::iterator> node_store_;
+  std::list<LRUKNode> young_list_, old_list_;
+  size_t k_;
+  size_t curr_size_{0};
+  size_t replacer_size_;
+  size_t timestamp_{0};
+  std::mutex latch_;
 };
 
 }  // namespace bustub
