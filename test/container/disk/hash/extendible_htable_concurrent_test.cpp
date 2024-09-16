@@ -113,7 +113,7 @@ void LookupHelper(DiskExtendibleHashTable<GenericKey<8>, RID, GenericComparator<
 //===----------------------------------------------------------------------===//
 
 // NOLINTNEXTLINE
-TEST(ExtendibleHTableConcurrentTest, DISABLED_InsertTest1) {
+TEST(ExtendibleHTableConcurrentTest, InsertTest1) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -147,7 +147,7 @@ TEST(ExtendibleHTableConcurrentTest, DISABLED_InsertTest1) {
 }
 
 // NOLINTNEXTLINE
-TEST(ExtendibleHTableConcurrentTest, DISABLED_InsertTest2) {
+TEST(ExtendibleHTableConcurrentTest, InsertTest2) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -180,7 +180,7 @@ TEST(ExtendibleHTableConcurrentTest, DISABLED_InsertTest2) {
 }
 
 // NOLINTNEXTLINE
-TEST(ExtendibleHTableConcurrentTest, DISABLED_DeleteTest1) {
+TEST(ExtendibleHTableConcurrentTest, DeleteTest1) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -216,7 +216,7 @@ TEST(ExtendibleHTableConcurrentTest, DISABLED_DeleteTest1) {
 }
 
 // NOLINTNEXTLINE
-TEST(ExtendibleHTableConcurrentTest, DISABLED_DeleteTest2) {
+TEST(ExtendibleHTableConcurrentTest, DeleteTest2) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -252,7 +252,7 @@ TEST(ExtendibleHTableConcurrentTest, DISABLED_DeleteTest2) {
   }
 }
 
-TEST(ExtendibleHTableConcurrentTest, DISABLED_MixTest1) {
+TEST(ExtendibleHTableConcurrentTest, MixTest1) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -299,7 +299,7 @@ TEST(ExtendibleHTableConcurrentTest, DISABLED_MixTest1) {
   }
 }
 
-TEST(ExtendibleHTableConcurrentTest, DISABLED_MixTest2) {
+TEST(ExtendibleHTableConcurrentTest, MixTest2) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -354,6 +354,21 @@ TEST(ExtendibleHTableConcurrentTest, DISABLED_MixTest2) {
     int64_t value = key & 0xFFFFFFFF;
     EXPECT_EQ(rids[0].GetSlotNum(), value);
   }
+}
+
+TEST(ExtendibleHTableTest, DebugTest) {
+  auto disk_mgr = std::make_unique<DiskManagerUnlimitedMemory>();
+  auto bpm = std::make_unique<BufferPoolManager>(3, disk_mgr.get());
+  DiskExtendibleHashTable<int, int, IntComparator> ht("debug_test", bpm.get(), IntComparator(), HashFunction<int>(), 9,
+                                                      9, 255);
+  for (int i = 1; i <= 5; i++) {
+    ht.Insert(i, i);
+  }
+  std::vector<int> remove_order{1, 1, 5, 5, 3, 4};
+  for (auto i : remove_order) {
+    ht.Remove(i);
+  }
+  ht.VerifyIntegrity();
 }
 
 }  // namespace bustub

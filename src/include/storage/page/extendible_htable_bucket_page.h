@@ -85,7 +85,7 @@ class ExtendibleHTableBucketPage {
    */
   auto Remove(const KeyType &key, const KeyComparator &cmp) -> bool;
 
-  void RemoveAt(uint32_t bucket_idx);
+  auto RemoveAt(uint32_t bucket_idx) -> bool;
 
   /**
    * @brief Gets the key at an index in the bucket.

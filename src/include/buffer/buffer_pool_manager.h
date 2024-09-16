@@ -16,6 +16,7 @@
 #include <memory>
 #include <mutex>  // NOLINT
 #include <unordered_map>
+#include <vector>
 
 #include "buffer/lru_k_replacer.h"
 #include "common/config.h"
@@ -192,6 +193,9 @@ class BufferPoolManager {
   std::list<frame_id_t> free_list_;
   /** This latch protects shared data structures. We recommend updating this comment to describe what it protects. */
   std::mutex latch_;
+  std::mutex free_list_mutex_;
+  std::shared_mutex page_table_mutex_;
+  std::vector<std::mutex> pages_mutex_;
 
   /**
    * @brief FlushPage 辅助函数，实现刷新数据到磁盘上的具体功能
@@ -216,7 +220,7 @@ class BufferPoolManager {
    * @param page_id 要调入内存的页面 id
    * @return 返回调入内存后页面的地址，如果没有可以 frame 返回 nullptr
    */
-  auto GetPageFromDisk(page_id_t page_id) -> Page *;
+  auto GetPageFromDisk(page_id_t page_id, frame_id_t &fid) -> Page *;
 
   /**
    * @brief Allocate a page on disk. Caller should acquire the latch before calling this function.
