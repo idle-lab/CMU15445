@@ -156,4 +156,30 @@ TEST(ExtendibleHTableTest, RemoveTest1) {
   ht.VerifyIntegrity();
 }
 
+TEST(ExtendibleHTableTest, InsertTest3) {
+  auto disk_mgr = std::make_unique<DiskManagerUnlimitedMemory>();
+  auto bpm = std::make_unique<BufferPoolManager>(50, disk_mgr.get());
+
+  DiskExtendibleHashTable<int, int, IntComparator> ht("blah", bpm.get(), IntComparator(), HashFunction<int>(), 4, 6, 2);
+  srand(time(0));
+  std::vector<int> insert;
+  for (int i = 0;; i += 16) {
+    if (!ht.Insert(i, i)) {
+      break;
+    }
+    insert.push_back(i);
+    std::vector<int> res;
+    ASSERT_TRUE(ht.GetValue(i, &res));
+    ASSERT_EQ(1, res.size());
+    ASSERT_EQ(i, res[0]);
+  }
+  ht.VerifyIntegrity();
+  // ht.PrintHT();
+  for (auto &x : insert) {
+    auto res = ht.Remove(x);
+    ASSERT_TRUE(res);
+    ht.VerifyIntegrity();
+  }
+}
+
 }  // namespace bustub

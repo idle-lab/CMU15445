@@ -47,7 +47,7 @@ void BufferPoolManager::PinPage(page_id_t page_id) {
   pages_[fid].pin_count_++;
 }
 
-auto BufferPoolManager::GetPageFromDisk(page_id_t page_id, frame_id_t &fid) -> Page * {
+auto BufferPoolManager::GetPageFromDisk(page_id_t page_id, frame_id_t &fid, std::future<bool> &fut) -> Page * {
   std::lock_guard<std::shared_mutex> lk2(page_table_mutex_);
   // 找到可用的 frame
   if (!free_list_.empty()) {
@@ -59,7 +59,7 @@ auto BufferPoolManager::GetPageFromDisk(page_id_t page_id, frame_id_t &fid) -> P
       return nullptr;
     }
     pages_mutex_[fid].lock();
-    Flush(pages_[fid].GetPageId());
+    fut = Flush(pages_[fid].GetPageId());
     page_table_.erase(pages_[fid].GetPageId());
     ResetPage(fid);
   }
@@ -81,20 +81,17 @@ void BufferPoolManager::ResetPage(frame_id_t frame_id) {
   pages_[frame_id].pin_count_ = 0;
 }
 
-auto BufferPoolManager::Flush(page_id_t page_id) -> bool {
+auto BufferPoolManager::Flush(page_id_t page_id) -> std::future<bool> {
   auto &page = pages_[page_table_[page_id]];
+  auto pro = disk_scheduler_->CreatePromise();
+  auto fut = pro.get_future();
   if (page.IsDirty()) {
-    auto pro = disk_scheduler_->CreatePromise();
-    auto fut = pro.get_future();
     disk_scheduler_->Schedule(DiskRequest{/*is_write=*/true, /*data=*/page.GetData(),
                                           /*page_id=*/page.page_id_, std::move(pro)});
-    if (fut.get()) {
-      page.is_dirty_ = false;
-      return true;
-    }
-    return false;  // 写出失败
+  } else {
+    pro.set_value(true);
   }
-  return true;
+  return fut;
 }
 
 auto BufferPoolManager::NewPage(page_id_t *page_id) -> Page * {
@@ -102,7 +99,11 @@ auto BufferPoolManager::NewPage(page_id_t *page_id) -> Page * {
   *page_id = AllocatePage();
   std::lock_guard<std::mutex> lk1(free_list_mutex_);
   frame_id_t fid = INVALID_PAGE_ID;
-  Page *page = GetPageFromDisk(*page_id, fid);
+  std::future<bool> fut;
+  Page *page = GetPageFromDisk(*page_id, fid, fut);
+  if (fut.valid() && !fut.get()) {
+    return nullptr;
+  }
   pages_mutex_[fid].unlock();
   return page;
 }
@@ -110,6 +111,7 @@ auto BufferPoolManager::NewPage(page_id_t *page_id) -> Page * {
 auto BufferPoolManager::FetchPage(page_id_t page_id, [[maybe_unused]] AccessType access_type) -> Page * {
   // std::lock_guard<std::mutex> lk(latch_);
   Page *page;
+  std::future<bool> fut;
   frame_id_t fid = INVALID_PAGE_ID;
   {
     std::lock_guard<std::mutex> lk1(free_list_mutex_);
@@ -123,19 +125,22 @@ auto BufferPoolManager::FetchPage(page_id_t page_id, [[maybe_unused]] AccessType
       }
     }
     // 不存在，要从磁盘调页面
-    page = GetPageFromDisk(page_id, fid);
+    page = GetPageFromDisk(page_id, fid, fut);
     if (page == nullptr) {
       return nullptr;
     }
   }
 
+  if (fut.valid() && !fut.get()) {
+    return nullptr;
+  }
   auto pro = disk_scheduler_->CreatePromise();
-  auto fut = pro.get_future();
+  auto fut_read = pro.get_future();
   disk_scheduler_->Schedule(DiskRequest{/*is_write=*/false, /*data=*/page->GetData(),
                                         /*page_id=*/page->page_id_, std::move(pro)});
 
   // 等到读取到页面后返回值。
-  if (fut.get()) {
+  if (fut_read.get()) {
     pages_mutex_[fid].unlock();
     return page;
   }
@@ -172,7 +177,7 @@ auto BufferPoolManager::FlushPage(page_id_t page_id) -> bool {
     return false;
   }
   std::lock_guard<std::mutex> lk3(pages_mutex_[page_table_[page_id]]);
-  return Flush(page_id);
+  return Flush(page_id).get();
 }
 
 void BufferPoolManager::FlushAllPages() {
@@ -193,8 +198,6 @@ auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool {
   }
   frame_id_t fid = page_table_[page_id];
   std::lock_guard<std::mutex> lk3(pages_mutex_[fid]);
-  // 脏页先刷新，再删除
-  Flush(page_id);
 
   // 移出 replacer，并将 frame 加入 free_list
   replacer_->Remove(fid);

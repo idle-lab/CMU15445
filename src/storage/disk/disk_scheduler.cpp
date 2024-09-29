@@ -16,7 +16,7 @@
 
 namespace bustub {
 
-DiskScheduler::DiskScheduler(DiskManager *disk_manager) : disk_manager_(disk_manager), background_threads_(5) {
+DiskScheduler::DiskScheduler(DiskManager *disk_manager) : disk_manager_(disk_manager), background_threads_(3) {
   // Spawn the background thread
   for (auto &thread : background_threads_) {
     thread = std::thread([this] { StartWorkerThread(); });
@@ -25,7 +25,7 @@ DiskScheduler::DiskScheduler(DiskManager *disk_manager) : disk_manager_(disk_man
 
 DiskScheduler::~DiskScheduler() {
   // Put a `std::nullopt` in the queue to signal to exit the loop
-  for (int i = 0; i < 5; ++i) {
+  for (int i = 0; i < 3; ++i) {
     request_queue_.Put(std::nullopt);
   }
   for (auto &thread : background_threads_) {

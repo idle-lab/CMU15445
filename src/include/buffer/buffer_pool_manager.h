@@ -201,7 +201,7 @@ class BufferPoolManager {
    * @brief FlushPage 辅助函数，实现刷新数据到磁盘上的具体功能
    * @param page_id 要刷新的页面 id
    */
-  auto Flush(page_id_t page_id) -> bool;
+  auto Flush(page_id_t page_id) -> std::future<bool>;
 
   /**
    * @brief 清空 frame 元数据和页数据
@@ -220,7 +220,7 @@ class BufferPoolManager {
    * @param page_id 要调入内存的页面 id
    * @return 返回调入内存后页面的地址，如果没有可以 frame 返回 nullptr
    */
-  auto GetPageFromDisk(page_id_t page_id, frame_id_t &fid) -> Page *;
+  auto GetPageFromDisk(page_id_t page_id, frame_id_t &fid, std::future<bool> &fut) -> Page *;
 
   /**
    * @brief Allocate a page on disk. Caller should acquire the latch before calling this function.
