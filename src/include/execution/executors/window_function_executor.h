@@ -19,8 +19,80 @@
 #include "execution/executors/abstract_executor.h"
 #include "execution/plans/window_plan.h"
 #include "storage/table/tuple.h"
+#include "execution/executors/sort_executor.h"
+#include "type/value_factory.h"
 
 namespace bustub {
+
+class WindowFunctionHelper {
+public:
+  WindowFunctionHelper(WindowFunctionType wf_type) : wf_type_(wf_type) { Init(); }
+
+  /** Initialization WindowFunctionHelper */
+  void Init() {
+    switch (wf_type_) {
+      case WindowFunctionType::CountStarAggregate: {
+        cur_value_ = ValueFactory::GetZeroValueByType(TypeId::INTEGER);
+        break;
+      }
+      case WindowFunctionType::CountAggregate:
+      case WindowFunctionType::MaxAggregate:
+      case WindowFunctionType::MinAggregate:
+      case WindowFunctionType::SumAggregate: {
+        cur_value_ = ValueFactory::GetNullValueByType(TypeId::INTEGER);
+        break;
+      }
+    }
+  }
+
+  /** Combine @param value into cur_value_ */
+  void Combine(const Value& value) {
+    switch (wf_type_) {
+      case WindowFunctionType::CountStarAggregate: {
+        cur_value_ = cur_value_.Add(ValueFactory::GetIntegerValue(1));
+        break;
+      }
+      case WindowFunctionType::CountAggregate: {
+        if (value.IsNull()) {
+          return;
+        }
+        if (cur_value_.IsNull()) {
+          cur_value_ = ValueFactory::GetZeroValueByType(TypeId::INTEGER);
+        }
+        cur_value_ = cur_value_.Add(ValueFactory::GetIntegerValue(1));
+        break;
+      }
+      case WindowFunctionType::SumAggregate: {
+        if (value.IsNull()) {
+          return;
+        }
+        if (cur_value_.IsNull()) {
+          cur_value_ = ValueFactory::GetZeroValueByType(value.GetTypeId());
+        }
+        cur_value_ = cur_value_.Add(value);
+        break;
+      }
+      case WindowFunctionType::MaxAggregate: 
+      case WindowFunctionType::MinAggregate: {
+        if (value.IsNull()) {
+          return;
+        }
+        if (cur_value_.IsNull()) {
+          cur_value_ = value;
+        } else {
+          cur_value_ = (wf_type_ == WindowFunctionType::MaxAggregate ? cur_value_.Max(value) : cur_value_.Min(value));
+        }
+      }
+    }
+  }
+
+  /** Get current aggregation result. */
+  auto Get() -> Value& { return cur_value_; }
+
+private:
+  Value cur_value_;
+  WindowFunctionType wf_type_;
+};
 
 /**
  * The WindowFunctionExecutor executor executes a window function for columns using window function.
@@ -90,5 +162,7 @@ class WindowFunctionExecutor : public AbstractExecutor {
 
   /** The child executor from which tuples are obtained */
   std::unique_ptr<AbstractExecutor> child_executor_;
+
+  std::unordered_map<RID, std::vector<Value>> result_;
 };
 }  // namespace bustub

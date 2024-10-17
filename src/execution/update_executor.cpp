@@ -38,12 +38,6 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
   while (child_executor_->Next(&tp, &rd)) {
     // delete
     table_info_->table_->UpdateTupleMeta({INVALID_TXN_ID, true}, rd);
-    for (auto &index_info : indexs_info_) {
-      auto key =
-          tp.KeyFromTuple(table_info_->schema_, *index_info->index_->GetKeySchema(), index_info->index_->GetKeyAttrs());
-      index_info->index_->DeleteEntry(tp, rd, exec_ctx_->GetTransaction());
-    }
-
     // insert
     std::vector<Value> values;
     for (auto &expr : plan_->target_expressions_) {
@@ -52,12 +46,18 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     Tuple new_tp{values, &table_info_->schema_};
     auto new_rd = table_info_->table_->InsertTuple({INVALID_TXN_ID, false}, new_tp);
     if (new_rd == std::nullopt) {
-      continue;
     }
+    // update indexs
     for (auto &index_info : indexs_info_) {
-      auto key = new_tp.KeyFromTuple(table_info_->schema_, *index_info->index_->GetKeySchema(),
-                                     index_info->index_->GetKeyAttrs());
-      index_info->index_->InsertEntry(new_tp, new_rd.value(), exec_ctx_->GetTransaction());
+      // delete
+      auto key =
+          tp.KeyFromTuple(table_info_->schema_, *index_info->index_->GetKeySchema(), index_info->index_->GetKeyAttrs());
+      index_info->index_->DeleteEntry(key, rd, exec_ctx_->GetTransaction());
+
+      // insert
+      auto new_key = new_tp.KeyFromTuple(table_info_->schema_, *index_info->index_->GetKeySchema(),
+                                         index_info->index_->GetKeyAttrs());
+      index_info->index_->InsertEntry(new_key, new_rd.value(), exec_ctx_->GetTransaction());
     }
     cnt++;
   }

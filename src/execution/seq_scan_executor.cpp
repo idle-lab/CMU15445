@@ -18,25 +18,31 @@ SeqScanExecutor::SeqScanExecutor(ExecutorContext *exec_ctx, const SeqScanPlanNod
     : AbstractExecutor(exec_ctx), plan_(plan) {}
 
 void SeqScanExecutor::Init() {
-  auto table_info = exec_ctx_->GetCatalog()->GetTable(plan_->table_name_);
-  tit_ = table_info->table_->MakeIterator();
+  table_info_ = exec_ctx_->GetCatalog()->GetTable(plan_->table_name_);
+  rids_.clear();
+  rid_it_ = 0;
+  // Get all rid.
+  for (auto tit = table_info_->table_->MakeIterator(); !tit.IsEnd(); ++tit) {
+    rids_.push_back(tit.GetRID());
+  }
 }
 
 auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
-  if (tit_.IsEnd()) {
+  std::pair<TupleMeta, Tuple> tp;
+  while (rid_it_ < rids_.size()) {
+    tp = table_info_->table_->GetTuple(rids_[rid_it_]);
+    // Executor should emit the tuples that have not been deleted and satisfy predicates
+    if (!tp.first.is_deleted_ && (plan_->filter_predicate_ == nullptr ||
+                                  plan_->filter_predicate_->Evaluate(&tp.second, table_info_->schema_).GetAs<bool>())) {
+      break;
+    }
+    rid_it_++;
+  }
+  if (rid_it_ >= rids_.size()) {
     return false;
   }
-  auto tp = tit_.GetTuple();
-  while (!tit_.IsEnd() && tp.first.is_deleted_) {
-    tp = tit_.GetTuple();
-    ++tit_;
-  }
-  if (tit_.IsEnd()) {
-    return false;
-  }
-  *tuple = tit_.GetTuple().second;
-  *rid = tit_.GetRID();
-  ++tit_;
+  *tuple = tp.second;
+  *rid = rids_[rid_it_++];
   return true;
 }
 

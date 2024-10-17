@@ -36,23 +36,27 @@ void InsertExecutor::Init() {
  *
  * NOTE: InsertExecutor::Next() does not use the `rid` out-parameter.
  * NOTE: InsertExecutor::Next() returns true with number of inserted rows produced only once.
- * NOTE: 只能执行一遍
  */
 auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
+  // this func only execute once
   if (is_over_) {
     return false;
   }
   is_over_ = true;
   Tuple tp;
   RID rd;
-  TupleMeta tp_mate;
-  tp_mate.is_deleted_ = false;
-  tp_mate.ts_ = INVALID_TXN_ID;
   int32_t cnt = 0;
   while (child_executor_->Next(&tp, &rd)) {
-    rd = table_info_->table_->InsertTuple(tp_mate, tp, exec_ctx_->GetLockManager()).value();
-    for (auto &index : indexs_info_) {
-      index->index_->InsertEntry(tp, rd, exec_ctx_->GetTransaction());
+    // insert data
+    auto rd = table_info_->table_->InsertTuple({INVALID_TXN_ID, false}, tp);
+    if (rd == std::nullopt) {
+      continue;
+    }
+    // update indexs
+    for (auto &index_info : indexs_info_) {
+      auto key =
+          tp.KeyFromTuple(table_info_->schema_, *index_info->index_->GetKeySchema(), index_info->index_->GetKeyAttrs());
+      index_info->index_->InsertEntry(key, rd.value(), exec_ctx_->GetTransaction());
     }
     cnt++;
   }
