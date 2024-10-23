@@ -34,7 +34,7 @@ void NestedLoopJoinExecutor::Init() {
   left_executor_->Init();
   right_executor_->Init();
   is_over_ = false;
-  cnt = 0;
+  cnt_ = 0;
   if (!left_executor_->Next(&left_tuple_, &left_rid_)) {
     is_over_ = true;
   }
@@ -60,14 +60,14 @@ auto NestedLoopJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool {
           values.emplace_back(right_tuple.GetValue(&right_executor_->GetOutputSchema(), i));
         }
         *tuple = Tuple{values, &plan_->OutputSchema()};
-        cnt++;
+        cnt_++;
         return true;
       }
     }
 
     // When the join type is LEFT join and right table have no tuple match with current left tuple,
     // You should emit the tuple join with right tuple that all values are integer_null.
-    if (plan_->join_type_ == JoinType::LEFT && cnt == 0) {
+    if (plan_->join_type_ == JoinType::LEFT && cnt_ == 0) {
       std::vector<Value> values;
       for (uint32_t i = 0; i < left_executor_->GetOutputSchema().GetColumnCount(); ++i) {
         values.emplace_back(left_tuple_.GetValue(&left_executor_->GetOutputSchema(), i));
@@ -86,7 +86,7 @@ auto NestedLoopJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool {
       is_over_ = true;
     }
     right_executor_->Init();
-    cnt = 0;
+    cnt_ = 0;
   }
 }
 

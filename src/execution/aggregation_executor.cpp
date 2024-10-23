@@ -51,9 +51,9 @@ auto AggregationExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   if (*aht_iterator_ == aht_->End()) {
     return false;
   }
-  std::vector<Value> values(std::move(aht_iterator_->Key().group_bys_));
+  std::vector<Value> values(aht_iterator_->Key().group_bys_);
   for (auto &value : aht_iterator_->Val().aggregates_) {
-    values.emplace_back(std::move(value));
+    values.emplace_back(value);
   }
   *tuple = Tuple{values, &GetOutputSchema()};
   ++(*aht_iterator_);

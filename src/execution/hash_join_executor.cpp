@@ -33,7 +33,7 @@ void HashJoinExecutor::Init() {
   right_child_->Init();
   ht_.clear();
   is_over_ = false;
-  now_value = nullptr;
+  now_value_ = nullptr;
 
   Tuple tuple;
   RID rid;
@@ -47,10 +47,10 @@ auto HashJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     return false;
   }
   // find a vaild right tuple.
-  while (!is_right_over_ && (now_value == nullptr || value_it_ >= now_value->tuples_.size())) {
+  while (!is_right_over_ && (now_value_ == nullptr || value_it_ >= now_value_->tuples_.size())) {
     if (!right_child_->Next(&right_tuple_, &right_rid_)) {
       if (plan_->GetJoinType() == JoinType::LEFT) {
-        now_value = nullptr;
+        now_value_ = nullptr;
         is_right_over_ = true;
         break;
       }
@@ -59,7 +59,7 @@ auto HashJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     }
     auto right_key = MakeRightHashJoinKey(&right_tuple_);
     if (ht_.find(right_key) != ht_.end()) {
-      now_value = &ht_[right_key];
+      now_value_ = &ht_[right_key];
       ht_[right_key].matched_ = true;
       value_it_ = 0;
       break;
@@ -91,7 +91,7 @@ auto HashJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   // join left and right tuples.
   std::vector<Value> values;
   for (size_t i = 0; i < left_child_->GetOutputSchema().GetColumnCount(); ++i) {
-    values.emplace_back(now_value->tuples_[value_it_].GetValue(&left_child_->GetOutputSchema(), i));
+    values.emplace_back(now_value_->tuples_[value_it_].GetValue(&left_child_->GetOutputSchema(), i));
   }
   for (size_t i = 0; i < right_child_->GetOutputSchema().GetColumnCount(); ++i) {
     values.emplace_back(right_tuple_.GetValue(&right_child_->GetOutputSchema(), i));

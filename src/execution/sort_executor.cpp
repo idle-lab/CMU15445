@@ -2,6 +2,27 @@
 
 namespace bustub {
 
+void SortTupleHelperFunction(std::vector<Tuple> &tuples,
+                             const std::vector<std::pair<OrderByType, AbstractExpressionRef>> &order_bys,
+                             const Schema &tuple_schema) {
+  std::sort(tuples.begin(), tuples.end(), [&order_bys, &tuple_schema](const Tuple &left, const Tuple &right) -> bool {
+    for (auto &x : order_bys) {
+      auto left_value = x.second->Evaluate(&left, tuple_schema);
+      auto rigth_value = x.second->Evaluate(&right, tuple_schema);
+      if (left_value.CompareEquals(rigth_value) == CmpBool::CmpTrue) {
+        continue;
+      }
+      if (((x.first == OrderByType::DEFAULT || x.first == OrderByType::ASC) &&
+           left_value.CompareLessThan(rigth_value) == CmpBool::CmpTrue) ||
+          (x.first == OrderByType::DESC && left_value.CompareGreaterThan(rigth_value) == CmpBool::CmpTrue)) {
+        return true;
+      }
+      break;
+    }
+    return false;
+  });
+}
+
 SortExecutor::SortExecutor(ExecutorContext *exec_ctx, const SortPlanNode *plan,
                            std::unique_ptr<AbstractExecutor> &&child_executor)
     : AbstractExecutor(exec_ctx),

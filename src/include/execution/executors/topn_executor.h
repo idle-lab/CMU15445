@@ -28,7 +28,7 @@ namespace bustub {
 /** A simplified heap for top n executor. */
 class SimpleTopNHeap {
  public:
-  SimpleTopNHeap(const TopNPlanNode *plan) {
+  explicit SimpleTopNHeap(const TopNPlanNode *plan) {
     comparator_ = [plan](const Tuple &left, const Tuple &right) -> bool {
       for (auto &x : plan->GetOrderBy()) {
         auto left_value = x.second->Evaluate(&left, plan->OutputSchema());
@@ -69,7 +69,7 @@ class SimpleTopNHeap {
 
  private:
   void AdjustUp(size_t idx) {
-    for (; idx;) {
+    for (; idx != 0U;) {
       size_t fa = ((idx + 1) >> 1) - 1;
       if (comparator_(heap_[idx], heap_[fa])) {
         return;

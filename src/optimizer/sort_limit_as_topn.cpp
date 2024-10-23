@@ -21,8 +21,8 @@ auto Optimizer::OptimizeSortLimitAsTopN(const AbstractPlanNodeRef &plan) -> Abst
 
   const auto *limit_plan = dynamic_cast<const LimitPlanNode *>(optimized_plan.get());
   auto sort_plan = std::dynamic_pointer_cast<const SortPlanNode>(optimized_plan->GetChildAt(0));
-  return std::make_shared<TopNPlanNode>(std::move(limit_plan->output_schema_), sort_plan->GetChildAt(0),
-                                        std::move(sort_plan->order_bys_), limit_plan->GetLimit());
+  return std::make_shared<TopNPlanNode>(limit_plan->output_schema_, sort_plan->GetChildAt(0), sort_plan->order_bys_,
+                                        limit_plan->GetLimit());
 }
 
 }  // namespace bustub

@@ -124,7 +124,7 @@ class HashJoinExecutor : public AbstractExecutor {
   std::unordered_map<HashJoinKey, HashJoinValue> ht_{};
 
   // join context
-  HashJoinValue *now_value{nullptr};
+  HashJoinValue *now_value_{nullptr};
   Tuple right_tuple_;
   RID right_rid_;
   size_t value_it_;

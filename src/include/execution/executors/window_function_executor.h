@@ -19,14 +19,13 @@
 #include "execution/executors/abstract_executor.h"
 #include "execution/plans/window_plan.h"
 #include "storage/table/tuple.h"
-#include "execution/executors/sort_executor.h"
 #include "type/value_factory.h"
 
 namespace bustub {
 
 class WindowFunctionHelper {
-public:
-  WindowFunctionHelper(WindowFunctionType wf_type) : wf_type_(wf_type) { Init(); }
+ public:
+  explicit WindowFunctionHelper(WindowFunctionType wf_type) : wf_type_(wf_type) { Init(); }
 
   /** Initialization WindowFunctionHelper */
   void Init() {
@@ -38,15 +37,16 @@ public:
       case WindowFunctionType::CountAggregate:
       case WindowFunctionType::MaxAggregate:
       case WindowFunctionType::MinAggregate:
-      case WindowFunctionType::SumAggregate: {
+      case WindowFunctionType::SumAggregate:
+      case WindowFunctionType::Rank: {
         cur_value_ = ValueFactory::GetNullValueByType(TypeId::INTEGER);
         break;
       }
     }
   }
 
-  /** Combine @param value into cur_value_ */
-  void Combine(const Value& value) {
+  /** Combine value into cur_value_ */
+  void Combine(const Value &value) {
     switch (wf_type_) {
       case WindowFunctionType::CountStarAggregate: {
         cur_value_ = cur_value_.Add(ValueFactory::GetIntegerValue(1));
@@ -62,7 +62,8 @@ public:
         cur_value_ = cur_value_.Add(ValueFactory::GetIntegerValue(1));
         break;
       }
-      case WindowFunctionType::SumAggregate: {
+      case WindowFunctionType::SumAggregate:
+      case WindowFunctionType::Rank: {
         if (value.IsNull()) {
           return;
         }
@@ -72,7 +73,7 @@ public:
         cur_value_ = cur_value_.Add(value);
         break;
       }
-      case WindowFunctionType::MaxAggregate: 
+      case WindowFunctionType::MaxAggregate:
       case WindowFunctionType::MinAggregate: {
         if (value.IsNull()) {
           return;
@@ -82,14 +83,15 @@ public:
         } else {
           cur_value_ = (wf_type_ == WindowFunctionType::MaxAggregate ? cur_value_.Max(value) : cur_value_.Min(value));
         }
+        break;
       }
     }
   }
 
   /** Get current aggregation result. */
-  auto Get() -> Value& { return cur_value_; }
+  auto Get() -> Value & { return cur_value_; }
 
-private:
+ private:
   Value cur_value_;
   WindowFunctionType wf_type_;
 };
@@ -157,12 +159,22 @@ class WindowFunctionExecutor : public AbstractExecutor {
   auto GetOutputSchema() const -> const Schema & override { return plan_->OutputSchema(); }
 
  private:
+  auto IsEqual(const std::vector<Value> &left, const std::vector<Value> &right) -> bool {
+    for (size_t i = 0; i < left.size(); ++i) {
+      if (left[i].CompareEquals(right[i]) != CmpBool::CmpTrue) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   /** The window aggregation plan node to be executed */
   const WindowFunctionPlanNode *plan_;
 
   /** The child executor from which tuples are obtained */
   std::unique_ptr<AbstractExecutor> child_executor_;
 
-  std::unordered_map<RID, std::vector<Value>> result_;
+  std::vector<Tuple> result_;
+  size_t it_;
 };
 }  // namespace bustub

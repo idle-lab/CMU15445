@@ -38,7 +38,7 @@ auto IndexScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   TupleMeta tp_mate;
   while (rid_it_ < rids_.size()) {
     tp_mate = table_info_->table_->GetTupleMeta(rids_[rid_it_]);
-    if (tp_mate.is_deleted_ == false) {
+    if (!tp_mate.is_deleted_) {
       break;
     }
     rid_it_++;
