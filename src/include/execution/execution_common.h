@@ -10,11 +10,19 @@
 
 namespace bustub {
 
+auto CollectUndoLogs(TransactionManager* transaction_manager, const RID& rid, timestamp_t read_ts, timestamp_t temp_ts) -> std::optional<std::vector<UndoLog>>;
+
+void Modify(std::vector<Value>& values, const Schema* partial_schema, const UndoLog& undo_log);
+
+auto GetUndoLogSchema(const Schema* schema, const UndoLog&) -> Schema;
+
 auto ReconstructTuple(const Schema *schema, const Tuple &base_tuple, const TupleMeta &base_meta,
                       const std::vector<UndoLog> &undo_logs) -> std::optional<Tuple>;
 
 void TxnMgrDbg(const std::string &info, TransactionManager *txn_mgr, const TableInfo *table_info,
                TableHeap *table_heap);
+
+
 
 // Add new functions as needed... You are likely need to define some more functions.
 //
