@@ -29,43 +29,43 @@ void SeqScanExecutor::Init() {
 
 auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   std::optional<Tuple> res;
+  const auto* txn = exec_ctx_->GetTransaction();
   while (rid_it_ < rids_.size()) {
     auto tp = table_info_->table_->GetTuple(rids_[rid_it_]);
-    // 1. The tuple in the table heap is the most recent data. 
-    //    In this case, the sequential scan executor may directly return the tuple, 
-    //    or skip the tuple if it has been removed.
-    if (tp.first.ts_ == exec_ctx_->GetTransaction()->GetReadTs()) {
+
+    if (tp.first.ts_ <= txn->GetReadTs() || tp.first.ts_ == txn->GetTransactionTempTs()) {
+      // 1. The tuple in the table heap is the most recent data. 
+      //    In this case, the sequential scan executor may directly return the tuple, 
+      //    or skip the tuple if it has been removed.
+      // 2. The tuple in the table heap contains modification by the current transaction.
+      //    The current transaction has a “transaction temporary timestamp”, 
+      //    which is computed by `TXN_START_ID + txn_human_readable_id = txn_id`.
+      //    Executor should returns the tuple that modified by current transaction to user directly.
       if (tp.first.is_deleted_) {
+        rid_it_++;
         continue;
       }
       res.emplace(tp.second);
-      rid_it_++;
+    } else {
+      // 3. The tuple in the table heap is
+      //    (1) modified by another uncommitted transaction, 
+      //    (2) newer than the transaction read timestamp. 
+      //    In this case, you will need to iterate the version chain to collect all undo logs 
+      //    after the read timestamp, and recover the past version of the tuple. There is a special cases:
+      //    If no undolog's ts older than transaction's ts, we should skip this tuple.
+      auto undo_logs = CollectUndoLogs(exec_ctx_->GetTransactionManager(), tp.second.GetRid(),txn->GetReadTs());
+      if (!undo_logs.has_value()) {
+        rid_it_++;
+        continue;
+      }
+      res = ReconstructTuple(&table_info_->schema_, tp.second, tp.first, undo_logs.value());
+    }
+
+    // Executor should emit the tuples that have not been deleted and satisfy predicates
+    if (res.has_value() && (plan_->filter_predicate_ == nullptr ||
+                                  plan_->filter_predicate_->Evaluate(&res.value(), table_info_->schema_).GetAs<bool>())) {
       break;
     }
-
-    // 2. The tuple in the table heap contains modification by the current transaction.
-    //    The current transaction has a “transaction temporary timestamp”, 
-    //    which is computed by `TXN_START_ID + txn_human_readable_id = txn_id`.
-    //    Executor should returns the tuple that modified by current transaction to user directly.
-    // 
-    // 3. The tuple in the table heap is
-    //    (1) modified by another uncommitted transaction, 
-    //    (2) newer than the transaction read timestamp. 
-    //    In this case, you will need to iterate the version chain to collect all undo logs 
-    //    after the read timestamp, and recover the past version of the tuple.
-    auto undo_logs = CollectUndoLogs(exec_ctx_->GetTransactionManager(), tp.second.GetRid(),
-                                     exec_ctx_->GetTransaction()->GetReadTs(), 
-                                     exec_ctx_->GetTransaction()->GetTransactionTempTs());
-    if (undo_logs.has_value()) {
-      res = ReconstructTuple(&table_info_->schema_, tp.second, tp.first, undo_logs.value());
-
-      // Executor should emit the tuples that have not been deleted and satisfy predicates
-      if (res.has_value() && (plan_->filter_predicate_ == nullptr ||
-                                    plan_->filter_predicate_->Evaluate(&res.value(), table_info_->schema_).GetAs<bool>())) {
-        break;
-      }
-    }
-
     rid_it_++;
   }
   if (rid_it_ >= rids_.size()) {

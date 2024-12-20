@@ -19,6 +19,7 @@
 #include "execution/executor_context.h"
 #include "execution/executors/abstract_executor.h"
 #include "execution/plans/update_plan.h"
+#include "execution/execution_common.h"
 #include "storage/table/tuple.h"
 #include "type/value_factory.h"
 
@@ -62,7 +63,7 @@ class UpdateExecutor : public AbstractExecutor {
   const UpdatePlanNode *plan_;
 
   /** Metadata identifying the table that should be updated */
-  const TableInfo *table_info_;
+  TableInfo *table_info_;
   std::vector<IndexInfo *> indexs_info_;
   /** The child executor to obtain value from */
   std::unique_ptr<AbstractExecutor> child_executor_;

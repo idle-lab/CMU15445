@@ -6,11 +6,12 @@
 #include "catalog/catalog.h"
 #include "catalog/schema.h"
 #include "concurrency/transaction.h"
+#include "concurrency/transaction_manager.h"
 #include "storage/table/tuple.h"
 
 namespace bustub {
 
-auto CollectUndoLogs(TransactionManager* transaction_manager, const RID& rid, timestamp_t read_ts, timestamp_t temp_ts) -> std::optional<std::vector<UndoLog>>;
+auto CollectUndoLogs(TransactionManager* transaction_manager, const RID& rid, timestamp_t read_ts) -> std::optional<std::vector<UndoLog>>;
 
 void Modify(std::vector<Value>& values, const Schema* partial_schema, const UndoLog& undo_log);
 
@@ -22,20 +23,17 @@ auto ReconstructTuple(const Schema *schema, const Tuple &base_tuple, const Tuple
 void TxnMgrDbg(const std::string &info, TransactionManager *txn_mgr, const TableInfo *table_info,
                TableHeap *table_heap);
 
+auto IsWriteWriteConflict(Transaction* txn, timestamp_t tuple_ts) -> bool;
 
+auto GenerateDiffLog(const Schema* schema, const Tuple* new_tuple, const Tuple* old_tuple) -> UndoLog;
 
 // Add new functions as needed... You are likely need to define some more functions.
 //
 // To give you a sense of what can be shared across executors / transaction manager, here are the
 // list of helper function names that we defined in the reference solution. You should come up with
 // your own when you go through the process.
-// * CollectUndoLogs
 // * WalkUndoLogs
-// * Modify
-// * IsWriteWriteConflict
-// * GenerateDiffLog
 // * GenerateNullTupleForSchema
-// * GetUndoLogSchema
 //
 // We do not provide the signatures for these functions because it depends on the your implementation
 // of other parts of the system. You do not need to define the same set of helper functions in

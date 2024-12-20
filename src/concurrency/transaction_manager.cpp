@@ -55,7 +55,7 @@ auto TransactionManager::Commit(Transaction *txn) -> bool {
   std::unique_lock<std::mutex> commit_lck(commit_mutex_);
 
   // TODO(fall2023): acquire commit ts!
-  txn->commit_ts_.store(last_commit_ts_.fetch_add(1) + 1);
+  auto commit_ts = last_commit_ts_ + 1;
 
   if (txn->state_ != TransactionState::RUNNING) {
     throw Exception("txn not in running state");
@@ -70,14 +70,39 @@ auto TransactionManager::Commit(Transaction *txn) -> bool {
   }
 
   // TODO(fall2023): Implement the commit logic!
+  const auto& ws = txn->GetWriteSets();
+
 
   std::unique_lock<std::shared_mutex> lck(txn_map_mutex_);
 
   // TODO(fall2023): set commit timestamp + update last committed timestamp here.
+  // Iterate through all tuples changed by this transaction (using the write set),
+  // set the timestamp of the base tuples to the commit timestamp. 
+  for (const auto& [table_oid, write_set] : ws) {
+    auto* table_info = catalog_->GetTable(table_oid);
+    std::optional<VersionUndoLink> version_link;
+
+    for (const auto& changed_tuple_rid : write_set) {
+      auto tuple = table_info->table_->GetTuple(changed_tuple_rid);
+
+      tuple.first.ts_ = commit_ts;
+      table_info->table_->UpdateTupleInPlace(tuple.first, tuple.second, changed_tuple_rid);
+
+      // update progress status.
+      version_link = GetVersionLink(changed_tuple_rid);
+      if (!version_link.has_value()) {
+        continue;
+      }
+      version_link->in_progress_ = false;
+      UpdateVersionLink(changed_tuple_rid, version_link);
+    }
+  }
 
   txn->state_ = TransactionState::COMMITTED;
+  txn->commit_ts_ = commit_ts;
   running_txns_.UpdateCommitTs(txn->commit_ts_);
   running_txns_.RemoveTxn(txn->read_ts_);
+  ++last_commit_ts_;
 
   return true;
 }
@@ -94,6 +119,64 @@ void TransactionManager::Abort(Transaction *txn) {
   running_txns_.RemoveTxn(txn->read_ts_);
 }
 
-void TransactionManager::GarbageCollection() { UNIMPLEMENTED("not implemented"); }
+void TransactionManager::GarbageCollection() {
+  auto lowest_ts = running_txns_.GetWatermark();
+  std::unordered_map<txn_id_t, size_t> gc_cnt;
+
+  for (auto & [txn_id, txn] : txn_map_) {
+    if (txn->state_ != TransactionState::COMMITTED && txn->state_ != TransactionState::ABORTED) {
+      continue;
+    }
+
+    if (txn->undo_logs_.size() == 0) {
+      gc_cnt[txn_id] = 0;
+    }
+
+    for (auto [table_oid, rids/* must a copy */] : txn->GetWriteSets()) {
+      auto* table_info = catalog_->GetTable(table_oid);
+
+      // delete unaccessible undo log.
+      for (auto& rid : rids) {
+        auto meta = table_info->table_->GetTupleMeta(rid);
+        bool is_accessible = (meta.ts_ > lowest_ts);
+        auto opt = GetVersionLink(rid);
+        if (!opt.has_value()) {
+          continue;
+        }
+        auto cur = opt.value().prev_;
+
+        while (true) {
+          if (!is_accessible) {
+            // 可能之前的 gc 中被删除
+            auto it = txn_map_.find(cur.prev_txn_);
+            if (it == txn_map_.end()) {
+              break;
+            }
+            gc_cnt[cur.prev_txn_]++;
+            it->second->write_set_[table_oid].erase(rid);
+          }
+          auto undo_log = GetUndoLogOptional(cur);
+          if (!undo_log.has_value()) {
+            break;
+          }
+
+          // Keep the first undo log that is less than or equal to lowest_ts
+          is_accessible = (undo_log->ts_ > lowest_ts);
+          cur = undo_log->prev_version_;
+        }
+      }
+    }
+  }
+
+  for (auto& [txn_id, cnt] : gc_cnt) {
+    auto txn = txn_map_[txn_id];
+    if (txn->state_ != TransactionState::COMMITTED && txn->state_ != TransactionState::ABORTED) {
+      continue;
+    }
+    if (txn->undo_logs_.size() == cnt) {
+      txn_map_.erase(txn_id);
+    }
+  }
+}
 
 }  // namespace bustub

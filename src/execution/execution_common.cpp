@@ -2,7 +2,6 @@
 #include "catalog/catalog.h"
 #include "common/config.h"
 #include "common/macros.h"
-#include "concurrency/transaction_manager.h"
 #include "fmt/core.h"
 #include "storage/table/table_heap.h"
 #include "type/value.h"
@@ -10,19 +9,15 @@
 
 namespace bustub {
 
-auto CollectUndoLogs(TransactionManager* transaction_manager, const RID& rid, timestamp_t read_ts, timestamp_t temp_ts) -> std::optional<std::vector<UndoLog>> {
+auto CollectUndoLogs(TransactionManager* transaction_manager, const RID& rid, timestamp_t read_ts) -> std::optional<std::vector<UndoLog>> {
   std::vector<UndoLog> undo_logs;
   auto is_exists = false;
   auto cur = transaction_manager->GetUndoLink(rid);
   while (cur.has_value() && cur->IsValid()) {
     auto undo_log = transaction_manager->GetUndoLog(cur.value());
-    if (undo_log.ts_ < read_ts) {
-      is_exists = true;
-      break;
-    }
     undo_logs.emplace_back(undo_log);
     cur = undo_logs.back().prev_version_;
-    if (temp_ts == undo_log.ts_ || read_ts == undo_log.ts_) {
+    if (undo_log.ts_ <= read_ts) {
       is_exists = true;
       break;
     }
@@ -69,10 +64,37 @@ auto ReconstructTuple(const Schema *schema, const Tuple &base_tuple, const Tuple
   return is_delete ? std::nullopt : std::make_optional<Tuple>(values, schema);
 }
 
+auto IsWriteWriteConflict(Transaction* txn, timestamp_t tuple_ts) -> bool {
+  // 元组的时间戳大于事务读取时间戳且不等于事务时间戳
+  if (tuple_ts != txn->GetTransactionTempTs() && txn->GetReadTs() < tuple_ts) {
+    return true;
+  }
+  return false; 
+}
+
+auto GenerateDiffLog(const Schema* schema, const Tuple* new_tuple, const Tuple* old_tuple) -> UndoLog {
+  size_t col_num = schema->GetColumnCount();
+  std::vector<bool> modified_fields(col_num);
+
+  std::vector<Value> values;
+  std::vector<Column> cols;
+
+  for (size_t i = 0;i < col_num;++i) {
+    if (new_tuple != nullptr && new_tuple->GetValue(schema, i).CompareExactlyEquals(old_tuple->GetValue(schema, i))) {
+      continue;
+    }
+    modified_fields[i] = true;
+    values.emplace_back(old_tuple->GetValue(schema, i));
+    cols.emplace_back(schema->GetColumn(i));
+  }
+  Schema delta_schema{cols};
+  return UndoLog{false, modified_fields, Tuple{values, &delta_schema}};
+}
+
 void TxnMgrDbg(const std::string &info, TransactionManager *txn_mgr, const TableInfo *table_info,
                TableHeap *table_heap) {
   // always use stderr for printing logs...
-  fmt::println(stderr, "debug_hook: {}\n", info);
+  fmt::println(stderr, "debug_hook: {}", info);
 
   for (auto it = table_info->table_->MakeIterator();!it.IsEnd();++it) {
     fmt::print(stderr, "RID={}/{} ", it.GetRID().GetPageId(), it.GetRID().GetSlotNum());
@@ -98,8 +120,12 @@ void TxnMgrDbg(const std::string &info, TransactionManager *txn_mgr, const Table
     fmt::print(stderr, ") \n");
 
     auto cur = txn_mgr->GetUndoLink(it.GetRID());
-    while (cur->IsValid()) {
-      auto undo_log = txn_mgr->GetUndoLog(cur.value());
+    while (cur.has_value() && cur->IsValid()) {
+      auto undo_log_opt = txn_mgr->GetUndoLogOptional(cur.value());
+      if (!undo_log_opt.has_value()) {
+        break;
+      }
+      auto undo_log = undo_log_opt.value();
       fmt::print(stderr, "\ttxn{}_{} ", cur->prev_txn_ & (TXN_START_ID - 1), cur->prev_log_idx_);
       size_t undo_idx = 0;
       if (undo_log.is_deleted_) {

@@ -18,6 +18,7 @@
 
 #include "execution/executor_context.h"
 #include "execution/executors/abstract_executor.h"
+#include "execution/execution_common.h"
 #include "execution/plans/delete_plan.h"
 #include "storage/table/tuple.h"
 
@@ -61,7 +62,8 @@ class DeleteExecutor : public AbstractExecutor {
 
   /** The child executor from which RIDs for deleted tuples are pulled */
   std::unique_ptr<AbstractExecutor> child_executor_;
-
+  std::vector<IndexInfo *> indexs_info_;
+  TableInfo* table_info_;
   /** delete executor produced only once */
   bool is_over_{false};
 };
